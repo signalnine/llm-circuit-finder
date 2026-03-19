@@ -38,6 +38,7 @@ from gguf_surgery import duplicate_layers
 from math_probe import MATH_QUESTIONS, score_math_response
 from eq_probe import EQ_SCENARIOS, build_eq_prompt, parse_eq_response, score_eq_response
 from reasoning_probe import REASONING_QUESTIONS, score_reasoning_response
+from code_probe import CODE_TASKS, score_code_response
 
 
 # Server config
@@ -194,56 +195,74 @@ def run_reasoning_probe(port: int) -> dict:
     return {"categories": cat_scores, "overall": overall}
 
 
+def run_code_probe(port: int) -> dict:
+    """Run all coding tasks and return scores by task and overall."""
+    task_scores = {}
+    for task in CODE_TASKS:
+        response = query_model(task["prompt"], port, max_tokens=1024)
+        score = score_code_response(task, response)
+        task_scores[task["id"]] = score
+
+    overall = sum(task_scores.values()) / len(task_scores) if task_scores else 0.0
+    return {"tasks": task_scores, "overall": overall}
+
+
 def run_evaluation(port: int) -> dict:
     """Run all probes and return results."""
     math_score = run_math_probe(port)
     eq_score = run_eq_probe(port)
     reasoning = run_reasoning_probe(port)
+    code = run_code_probe(port)
     return {
         "math_score": math_score,
         "eq_score": eq_score,
         "reasoning_score": reasoning["overall"],
         "reasoning_cats": reasoning["categories"],
+        "code_score": code["overall"],
+        "code_tasks": code["tasks"],
     }
 
 
 def print_results_table(results: list[dict], baseline: dict | None = None):
     """Print a live-updating results table."""
-    print("\n" + "=" * 105)
-    print(f"{'Config':>12} {'Layers':>8} {'Math':>8} {'EQ':>8} {'Reason':>8} "
-          f"{'Math Δ':>8} {'EQ Δ':>8} {'Reas Δ':>8} {'Combined Δ':>11}")
-    print("-" * 105)
+    print("\n" + "=" * 120)
+    print(f"{'Config':>12} {'Layers':>8} {'Math':>8} {'EQ':>8} {'Reason':>8} {'Code':>8} "
+          f"{'Math Δ':>8} {'EQ Δ':>8} {'Reas Δ':>8} {'Code Δ':>8} {'Combined Δ':>11}")
+    print("-" * 120)
 
     if baseline:
         brs = baseline.get('reasoning_score', 0)
+        bcs = baseline.get('code_score', 0)
         print(f"{'BASELINE':>12} {'0':>8} "
-              f"{baseline['math_score']:>8.4f} {baseline['eq_score']:>8.2f} {brs:>8.2%} "
-              f"{'---':>8} {'---':>8} {'---':>8} {'---':>11}")
-        print("-" * 105)
+              f"{baseline['math_score']:>8.4f} {baseline['eq_score']:>8.2f} {brs:>8.2%} {bcs:>8.2%} "
+              f"{'---':>8} {'---':>8} {'---':>8} {'---':>8} {'---':>11}")
+        print("-" * 120)
 
     for r in results:
         config = f"({r['dup_start']},{r['dup_end']})"
         n_dup = r['dup_end'] - r['dup_start']
         rs = r.get('reasoning_score', 0)
+        cs = r.get('code_score', 0)
 
         if baseline:
             math_delta = r['math_score'] - baseline['math_score']
             eq_delta = r['eq_score'] - baseline['eq_score']
             reas_delta = rs - baseline.get('reasoning_score', 0)
-            # Combined: weight EQ and reasoning more than math
-            combined = eq_delta + (reas_delta * 100)
+            code_delta = cs - baseline.get('code_score', 0)
+            combined = eq_delta + (reas_delta * 100) + (code_delta * 100)
             math_d = f"{math_delta:>+8.4f}"
             eq_d = f"{eq_delta:>+8.2f}"
             reas_d = f"{reas_delta:>+8.2%}"
+            code_d = f"{code_delta:>+8.2%}"
             comb_d = f"{combined:>+11.2f}"
         else:
-            math_d = eq_d = reas_d = comb_d = "---"
+            math_d = eq_d = reas_d = code_d = comb_d = "---"
 
         print(f"{config:>12} {n_dup:>8} "
-              f"{r['math_score']:>8.4f} {r['eq_score']:>8.2f} {rs:>8.2%} "
-              f"{math_d} {eq_d} {reas_d} {comb_d}")
+              f"{r['math_score']:>8.4f} {r['eq_score']:>8.2f} {rs:>8.2%} {cs:>8.2%} "
+              f"{math_d} {eq_d} {reas_d} {code_d} {comb_d}")
 
-    print("=" * 105)
+    print("=" * 120)
     sys.stdout.flush()
 
 
@@ -338,6 +357,8 @@ def main():
                 "eq_score": eval_result["eq_score"],
                 "reasoning_score": eval_result["reasoning_score"],
                 "reasoning_cats": eval_result.get("reasoning_cats", {}),
+                "code_score": eval_result.get("code_score", 0),
+                "code_tasks": eval_result.get("code_tasks", {}),
                 "timestamp": datetime.now().isoformat(),
             }
 
@@ -345,7 +366,8 @@ def main():
                 f.write(json.dumps(baseline) + "\n")
 
             brs = baseline['reasoning_score']
-            print(f"  Baseline: math={baseline['math_score']:.4f} eq={baseline['eq_score']:.2f} reasoning={brs:.2%}")
+            bcs = baseline.get('code_score', 0)
+            print(f"  Baseline: math={baseline['math_score']:.4f} eq={baseline['eq_score']:.2f} reasoning={brs:.2%} code={bcs:.2%}")
         finally:
             stop_server(proc)
 
@@ -420,6 +442,8 @@ def main():
                 "eq_score": eval_result["eq_score"],
                 "reasoning_score": eval_result["reasoning_score"],
                 "reasoning_cats": eval_result.get("reasoning_cats", {}),
+                "code_score": eval_result.get("code_score", 0),
+                "code_tasks": eval_result.get("code_tasks", {}),
                 "timestamp": datetime.now().isoformat(),
             }
 
