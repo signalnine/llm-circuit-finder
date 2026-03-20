@@ -16,6 +16,13 @@ import re
 import json
 
 
+def strip_thinking(response: str) -> str:
+    """Strip <think>...</think> blocks from thinking models (e.g., Qwen3.5)."""
+    if response is None:
+        return ""
+    return re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
+
+
 def extract_answer(response: str, marker: str = "ANSWER:") -> str:
     """Extract the answer after a marker."""
     if response is None:
@@ -449,6 +456,7 @@ def score_swe_response(task: dict, response: str) -> float:
     """Score an SWE task response."""
     if response is None:
         return 0.0
+    response = strip_thinking(response)
     return task["check"](response)
 
 
