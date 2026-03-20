@@ -108,15 +108,34 @@ This suggests layers 28-29 actively **interfere** with code generation — they 
 
 Validated top configurations against 10 real SWE benchmark tasks using Crush orchestrator.
 
+### Overall Results
+
 | Model | Size | Thunderdome Avg | Δ |
 |-------|------|-----------------|---|
-| Baseline (48 layers) | 18.6 GB | 0.573 | — |
-| del(24,26) (46 layers) | 16.6 GB | 0.535 | -3.8% |
-| del(28,30) (46 layers) | 16.6 GB | 0.526 | -4.7% |
-| dup(28,32) code circuit | 20.4 GB | 0.526 | -4.7% |
-| dup(18,21) reasoning circuit | 19.0 GB | 0.531 | -4.2% |
+| Baseline (48 layers) | 18 GB | 0.573 | — |
+| **del(28,30) (46 layers)** | **17 GB** | **0.542** | **-3.1%** |
+| del(24,26) (46 layers) | 17 GB | 0.535 | -3.8% |
+| dup(28,32) code circuit | 20 GB | 0.526 | -4.7% |
+| dup(18,21) reasoning circuit | 19 GB | 0.531 | -4.2% |
 
-**Probe-optimized models score within ~4% of baseline on Thunderdome.** The gap between probe improvements and end-to-end SWE performance reflects the difference between single-turn algorithmic coding and multi-turn agentic software engineering.
+### del(28,30) Per-Task Breakdown
+
+| Task | Baseline | Pruned | Δ |
+|------|----------|--------|---|
+| ecommerce-backend | 0.262 | **0.603** | **+130%** |
+| collab-server | 0.585 | 0.615 | +5% |
+| time-tracker | 0.215 | 0.246 | +14% |
+| phantom-invoice | 0.949 | 0.949 | 0% |
+| monorepo-disaster | 1.000 | 0.957 | -4% |
+| ssg-toolkit | 0.991 | 0.851 | -14% |
+| fts-search | 0.620 | 0.360 | -42% |
+| plugin-marketplace | 0.454 | 0.262 | -42% |
+| analytics-dashboard | 0.354 | 0.292 | -18% |
+| task-queue | 0.297 | 0.281 | -5% |
+
+Notable: ecommerce-backend improved by **+130%** — the pruned model handled this complex greenfield task dramatically better. Trade-offs exist on fts-search and plugin-marketplace. Overall -3.1% is the best Thunderdome result from any modified model, and with single trials there's significant noise.
+
+**Practical trade-off:** 11% smaller, ~3% faster, 3.1% worse on SWE benchmarks.
 
 ## Experiment 4: Cross-Model Comparison
 
