@@ -10,8 +10,14 @@ and compositions that trip up pattern-matching.
 import re
 
 
+def strip_thinking(response: str) -> str:
+    """Strip <think>...</think> blocks from thinking models (e.g., Qwen3.5)."""
+    return re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
+
+
 def extract_code(response: str) -> str:
-    """Extract code from a model response, handling markdown fences."""
+    """Extract code from a model response, handling markdown fences and thinking."""
+    response = strip_thinking(response)
     m = re.search(r"```(?:python|typescript|javascript|ts|js)?\s*\n(.*?)```", response, re.DOTALL)
     if m:
         return m.group(1).strip()
