@@ -39,6 +39,7 @@ from math_probe import MATH_QUESTIONS, score_math_response
 from eq_probe import EQ_SCENARIOS, build_eq_prompt, parse_eq_response, score_eq_response
 from reasoning_probe import REASONING_QUESTIONS, score_reasoning_response
 from code_probe import CODE_TASKS, score_code_response
+from swe_probe import SWE_TASKS, score_swe_response
 
 
 # Server config
@@ -207,12 +208,25 @@ def run_code_probe(port: int) -> dict:
     return {"tasks": task_scores, "overall": overall}
 
 
+def run_swe_probe(port: int) -> dict:
+    """Run all SWE agentic tasks and return scores."""
+    task_scores = {}
+    for task in SWE_TASKS:
+        response = query_model(task["prompt"], port, max_tokens=1024)
+        score = score_swe_response(task, response)
+        task_scores[task["id"]] = score
+
+    overall = sum(task_scores.values()) / len(task_scores) if task_scores else 0.0
+    return {"tasks": task_scores, "overall": overall}
+
+
 def run_evaluation(port: int) -> dict:
     """Run all probes and return results."""
     math_score = run_math_probe(port)
     eq_score = run_eq_probe(port)
     reasoning = run_reasoning_probe(port)
     code = run_code_probe(port)
+    swe = run_swe_probe(port)
     return {
         "math_score": math_score,
         "eq_score": eq_score,
@@ -220,6 +234,8 @@ def run_evaluation(port: int) -> dict:
         "reasoning_cats": reasoning["categories"],
         "code_score": code["overall"],
         "code_tasks": code["tasks"],
+        "swe_score": swe["overall"],
+        "swe_tasks": swe["tasks"],
     }
 
 
