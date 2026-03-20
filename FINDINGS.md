@@ -153,17 +153,36 @@ Devstral (dense 24B, 40 layers) was swept with the same code + SWE probes. **Eve
 
 Full results: 0 of 12 configurations improved either metric. Dense models are fundamentally more tightly coupled than MoE models.
 
-### Key Architecture Difference
+### GPT-OSS-20B Code+SWE Sweep
 
-| | Qwen3-Coder (MoE) | Devstral (Dense) |
-|---|---|---|
-| **Code baseline** | 38.1% | **75.0%** |
-| **SWE baseline** | 82.8% | **94.8%** |
-| **Configs that improved code** | **11 of 12** | **0 of 12** |
-| **Best prune effect** | +46.9% code | -29.2% code |
-| **Redundancy** | High (MoE routing) | None |
+GPT-OSS-20B (MoE, 24 layers) — too few layers for pruning to work:
 
-Devstral starts much stronger on both probes but is completely rigid — every layer is load-bearing. Qwen3-Coder's MoE architecture creates natural modularity where some experts/layers are redundant or even harmful for specific tasks.
+| Config | Mode | Code | SWE | Code Δ | SWE Δ |
+|--------|------|------|-----|--------|-------|
+| **BASELINE** | — | **47.8%** | **76.3%** | — | — |
+| dup(6,9) | dup | 61.6% | 70.0% | +13.8% | -6.3% |
+| del(12,14) | prune | 39.2% | 77.8% | -8.5% | +1.5% |
+| del(8,10) | prune | 0.0% | 25.4% | -47.8% | -50.9% |
+
+With only 24 layers, removing any 2 is catastrophic (8% of the model). Only dup(6,9) improved code, but at the cost of SWE.
+
+### DeepSeek-Coder-V2-Lite-16B
+
+Baseline scores: code=28.3%, swe=86.8% (27 layers, MoE). Layer surgery was not possible — the `deepseek2` architecture's tensor naming convention is not supported by `layer_path.py`. This is a tooling limitation, not a model limitation.
+
+### Multi-Model Comparison
+
+| Model | Arch | Layers | Type | Code | SWE | Pruning works? |
+|-------|------|--------|------|------|-----|----------------|
+| **Qwen3-Coder-30B-A3B** | qwen3moe | **48** | MoE | 38.1% | 82.8% | **YES (+47%)** |
+| GPT-OSS-20B | gpt-oss | 24 | MoE | 47.8% | 76.3% | No (too few layers) |
+| DeepSeek-Coder-V2-16B | deepseek2 | 27 | MoE | 28.3% | 86.8% | N/A (unsupported) |
+| Devstral-24B | llama | 40 | Dense | 75.0% | 94.8% | No (all configs hurt) |
+
+**Layer surgery requires:**
+1. **MoE architecture** — dense models are too tightly coupled
+2. **Enough layers (40+)** — 24-27 layers don't have enough redundancy
+3. **Redundant/harmful layers** — Qwen3-Coder uniquely has layers that actively interfere with coding
 
 ### Thunderdome Head-to-Head (Baselines)
 
