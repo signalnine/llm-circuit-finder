@@ -137,16 +137,35 @@ Notable: ecommerce-backend improved by **+130%** — the pruned model handled th
 
 **Practical trade-off:** 11% smaller, ~3% faster, 3.1% worse on SWE benchmarks.
 
-## Experiment 4: Cross-Model Comparison
+## Experiment 4: Cross-Model Comparison (Devstral-24B)
 
-### Devstral-24B Circuit Sweep
+### Devstral Code+SWE Sweep
 
-Devstral (dense, 40 layers) shows different circuit patterns:
-- Reasoning circuits are **deeper** (layers 26-29 vs 8-12)
-- Effects are **weaker** (+5.9% max vs +23.5%)
-- Dense models are more tightly coupled — less amenable to layer surgery
+Devstral (dense 24B, 40 layers) was swept with the same code + SWE probes. **Every configuration made the model worse** — the opposite of Qwen3-Coder where nearly every prune improved it.
 
-### Thunderdome Head-to-Head
+| Config | Mode | Code | SWE | Code Δ | SWE Δ |
+|--------|------|------|-----|--------|-------|
+| **BASELINE** | — | **75.0%** | **94.8%** | — | — |
+| dup(18,21) | dup | 61.1% | 91.1% | -13.9% | -3.8% |
+| del(28,30) | prune | 45.8% | 93.0% | -29.2% | -1.8% |
+| del(24,26) | prune | 36.6% | 86.7% | -38.4% | -8.2% |
+| del(20,22) | prune | 8.9% | 77.6% | -66.1% | -17.3% |
+
+Full results: 0 of 12 configurations improved either metric. Dense models are fundamentally more tightly coupled than MoE models.
+
+### Key Architecture Difference
+
+| | Qwen3-Coder (MoE) | Devstral (Dense) |
+|---|---|---|
+| **Code baseline** | 38.1% | **75.0%** |
+| **SWE baseline** | 82.8% | **94.8%** |
+| **Configs that improved code** | **11 of 12** | **0 of 12** |
+| **Best prune effect** | +46.9% code | -29.2% code |
+| **Redundancy** | High (MoE routing) | None |
+
+Devstral starts much stronger on both probes but is completely rigid — every layer is load-bearing. Qwen3-Coder's MoE architecture creates natural modularity where some experts/layers are redundant or even harmful for specific tasks.
+
+### Thunderdome Head-to-Head (Baselines)
 
 | Model | Avg Score | Wins |
 |-------|-----------|------|
