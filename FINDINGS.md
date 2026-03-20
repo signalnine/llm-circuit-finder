@@ -121,7 +121,16 @@ Per-task: ecommerce-backend improved +130%, but fts-search and plugin-marketplac
 | **dup(24,27)** | **29.8%** | **88.0%** | **+11.9%** | **+9.3%** |
 | del(16,18) | 0.0% | 80.7% | -17.9% | +2.0% |
 
-dup(24,27) is particularly interesting — both code and SWE improve substantially (+12% and +9%).
+dup(24,27) is particularly interesting — both code and SWE probes improve substantially (+12% and +9%).
+
+#### Thunderdome Validation (Aider)
+
+| Model | Thunderdome Avg | Δ |
+|-------|-----------------|---|
+| Mixtral baseline | 0.444 | — |
+| Mixtral dup(24,27) | 0.403 | -4.0% |
+
+Same pattern as Qwen3-Coder: probe improvements don't transfer to end-to-end SWE tasks.
 
 ### DeepSeek-Coder-V2-Lite (27 layers, 64 experts)
 
@@ -146,6 +155,18 @@ Despite having 128 experts, only 24 layers provides insufficient redundancy. Onl
 
 All configurations crashed on load. The alternating Mamba-2/attention pattern creates rigid layer dependencies that can't be disrupted by reordering or removal.
 
+## Thunderdome Validation Summary
+
+All Thunderdome-tested configurations showed the same pattern: **probe improvements do not transfer to end-to-end SWE benchmarks.**
+
+| Model | Config | Probe Code Δ | Probe SWE Δ | Thunderdome Δ |
+|-------|--------|-------------|-------------|---------------|
+| Qwen3-Coder | del(28,30) | +46.9% | +5.8% | **-3.1%** |
+| Qwen3-Coder | del(24,26) | +33.8% | +3.6% | -3.8% |
+| Mixtral 8x7B | dup(24,27) | +11.9% | +9.3% | **-4.0%** |
+
+The ~3-4% Thunderdome degradation is remarkably consistent across models and surgery strategies. Single-turn probes measure a different capability than multi-turn agentic SWE — the model's ability to iteratively read, write, test, and fix code involves holistic reasoning that can't be isolated to specific layers.
+
 ## Requirements for Successful Layer Surgery
 
 Based on testing across 7 models, layer surgery requires:
@@ -156,8 +177,10 @@ Based on testing across 7 models, layer surgery requires:
 4. **No thinking mode** — thinking models (Qwen3.5) generate 200+ tokens of reasoning that break probe evaluation
 
 The optimal strategy depends on expert count:
-- **128+ experts:** Prune harmful layers (Qwen3-Coder)
-- **8-64 experts:** Duplicate beneficial layers (Mixtral, DeepSeek)
+- **128+ experts:** Prune harmful layers (Qwen3-Coder: +47% code, model gets smaller)
+- **8-64 experts:** Duplicate beneficial layers (Mixtral: +16%, DeepSeek: +8%, model gets larger)
+
+**Practical takeaway:** Pruning high-expert MoE models is the most valuable application — models get simultaneously smaller, faster, and better on algorithmic probes, at the cost of ~3% on real SWE benchmarks. For latency-sensitive or resource-constrained deployments, this is a worthwhile trade-off.
 
 ## Tools Developed
 
