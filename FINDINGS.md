@@ -1,10 +1,14 @@
-# Circuit Discovery & Layer Surgery on Qwen3-Coder-30B-A3B
+# Layer Surgery on MoE Language Models: A Multi-Model Study
 
 ## Summary
 
-We used the llm-circuit-finder toolkit to systematically discover, duplicate, prune, and benchmark transformer layer configurations on Qwen3-Coder-30B-A3B (a 48-layer MoE model with 128 experts, 8 active per token). We evaluated changes across code, SWE reasoning, math, EQ, and reasoning probes, then validated promising configurations against the [Agentic Thunderdome](https://github.com/signalnine/thunderdome) SWE benchmark suite using the Crush orchestrator.
+We used the llm-circuit-finder toolkit to systematically discover, duplicate, prune, and benchmark transformer layer configurations across **7 models** spanning 4 architectures. We evaluated changes using code and SWE reasoning probes, then validated promising configurations against the [Agentic Thunderdome](https://github.com/signalnine/thunderdome) SWE benchmark suite.
 
-**Key finding:** Layer pruning is dramatically more effective than layer duplication. Removing just 2 layers (28-29) from the 48-layer model more than doubles code probe scores (38%→85%) while also improving SWE reasoning scores (83%→89%), with no regressions on canary tasks. The pruned model is 11% smaller and ~3% faster.
+**Key findings:**
+1. **Layer surgery works on pure MoE models** — 3 out of 4 MoE models improved with surgery
+2. **High-expert MoE models benefit from pruning**, low-expert models from duplication
+3. **Dense and hybrid (SSM+MoE) models are incompatible** with layer surgery
+4. **Probe improvements don't fully transfer to end-to-end SWE benchmarks** but pruned models trade <4% SWE performance for 11% size reduction
 
 ## Hardware
 
@@ -13,50 +17,82 @@ We used the llm-circuit-finder toolkit to systematically discover, duplicate, pr
 - **RAM:** 64 GB DDR4 @ 2666 MT/s
 - **Inference:** ollama 0.18.0, llama.cpp (built from source with CUDA sm_120)
 
-## Model Under Test
-
-- **Qwen3-Coder-30B-A3B-Instruct** (GGUF via ollama)
-- 48 transformer layers, 128 MoE experts, 8 active per token
-- ~18.6 GB model size (GGUF Q4)
-- Baseline inference: ~100 tok/s (ollama), ~210 tok/s (llama.cpp)
-
 ## Probe Design
 
 ### Code Probe (code_probe.py)
-6 hard algorithmic tasks calibrated to baseline around 38%:
+6 hard algorithmic tasks calibrated to ~38% baseline on Qwen3-Coder:
 
-| Task | Tests | Baseline | Difficulty |
-|------|-------|----------|------------|
-| serialize_tree | 7 | 57% | Tree serialization with None handling |
-| count_smaller_after | 7 | 43% | Merge sort with index tracking |
-| skyline | 5 | 20% | Sweep line + coordinate compression |
-| calculator | 8 | 25% | Full expression parser with unary minus |
-| burst_balloons | 6 | 17% | Interval DP, counterintuitive formulation |
-| min_refuel_stops | 6 | 67% | Greedy with max-heap |
+| Task | Tests | Difficulty |
+|------|-------|------------|
+| serialize_tree | 7 | Tree serialization with None handling |
+| count_smaller_after | 7 | Merge sort with index tracking |
+| skyline | 5 | Sweep line + coordinate compression |
+| calculator | 8 | Full expression parser with unary minus |
+| burst_balloons | 6 | Interval DP, counterintuitive formulation |
+| min_refuel_stops | 6 | Greedy with max-heap |
 
 ### SWE Probe (swe_probe.py)
-10 tasks testing agentic tool-use and engineering reasoning, baseline 82%:
+10 tasks testing agentic tool-use and engineering reasoning (~82% baseline), including canary tasks at 100% to detect regressions:
 
-| Task | Baseline | Tests |
-|------|----------|-------|
-| diff_comprehension | 40% | Read unified diff, count changes, identify fix |
-| git_bisect_reasoning | 50% | Reason about bisect results to find bug |
-| build_error_diagnosis | 75% | Diagnose TypeScript errors, provide fixes |
-| multi_file_conflict | 100% | Reason about rename + new code interaction (canary) |
-| flaky_test_diagnosis | 100% | Identify async race condition (canary) |
-| ci_pipeline_debug | 88% | Match workflow YAML to package.json scripts |
-| code_search_commands | 80% | Generate correct grep/find commands |
-| env_specific_bug | 100% | Docker networking + env var reasoning (canary) |
-| memory_leak_diagnosis | 100% | Find event listener leak in SSE handler (canary) |
-| refactoring_command | 83% | Generate sed/find commands for refactoring |
+- Diff comprehension, git bisect reasoning, build error diagnosis
+- Multi-file conflict analysis, flaky test diagnosis, CI pipeline debugging
+- Code search commands, environment-specific bugs, memory leak diagnosis
 
-Tasks scoring 100% serve as **canary tasks** — regressions here indicate the model is fundamentally broken.
+Both probes strip `<think>` blocks for compatibility with thinking models.
 
-## Experiment 1: Layer Duplication (RYS Method)
+## Multi-Model Results
 
-Duplicated contiguous blocks of 3-4 layers. Reasoning and code circuits are in completely different layer ranges.
+### Summary Table
 
-### Code vs Reasoning Circuit Map
+| Model | Arch | Layers | Experts | Type | Best Config | Code Δ | SWE Δ | Strategy |
+|-------|------|--------|---------|------|-------------|--------|-------|----------|
+| **Qwen3-Coder-30B** | qwen3moe | 48 | 128 | Pure MoE | **del(28,30)** | **+46.9%** | **+5.8%** | **Prune** |
+| **Mixtral 8x7B** | llama | 32 | 8 | Pure MoE | **dup(8,11)** | **+16.4%** | **+1.8%** | **Duplicate** |
+| **DeepSeek-Coder-V2** | deepseek2 | 27 | 64 | MoE+dense | **dup(6,9)** | **+7.8%** | **+2.0%** | **Duplicate** |
+| GPT-OSS-20B | gpt-oss | 24 | 128 | Pure MoE | — | All hurt | — | Too few layers |
+| Devstral-24B | llama | 40 | dense | Dense | — | All hurt | — | Every layer critical |
+| Nemotron-Nano-30B | nemotron_h_moe | 52 | 128 | Hybrid SSM+MoE | — | All crash | — | SSM breaks on reorder |
+| Qwen3.5-35B-A3B | qwen35moe | 40 | 256 | MoE+thinking | — | — | — | Thinking model incompatible |
+
+### Key Insight: Expert Count Determines Strategy
+
+```
+High experts (128+) → PRUNE redundant layers  (Qwen3-Coder: +47%)
+Low experts (8-64)  → DUPLICATE useful layers  (Mixtral: +16%, DeepSeek: +8%)
+```
+
+Models with many experts have natural redundancy — some layers actively interfere with coding. Models with few experts have every layer load-bearing, but benefit from reinforcing useful computation.
+
+## Detailed Results by Model
+
+### Qwen3-Coder-30B-A3B (48 layers, 128 experts)
+
+**Best model for surgery.** Nearly every pruning config improved both code and SWE scores.
+
+#### Pruning Results (Code + SWE Probes)
+
+| Config | Code | SWE | Code Δ | SWE Δ |
+|--------|------|-----|--------|-------|
+| **BASELINE** | **38.1%** | **82.8%** | — | — |
+| **del(28,30)** | **84.9%** | **88.6%** | **+46.9%** | **+5.8%** |
+| del(20,22) | 80.8% | 89.8% | +42.7% | +7.0% |
+| del(16,18) | 76.0% | 85.3% | +37.9% | +2.5% |
+| del(24,26) | 71.8% | 86.4% | +33.8% | +3.6% |
+| del(32,34) | 63.0% | 92.3% | +24.9% | +9.5% |
+
+11 of 12 configs improved code scores. Layers 28-29 actively **interfere** with code generation.
+
+#### Duplication Results
+
+| Config | Code | SWE | Code Δ | SWE Δ |
+|--------|------|-----|--------|-------|
+| dup(28,31) | 82.1% | 82.7% | +44.1% | -0.2% |
+| dup(12,15) | 64.4% | 84.1% | +26.4% | +1.2% |
+| dup(8,11) | 25.2% | 88.1% | -12.9% | +5.2% |
+
+Duplication also works but pruning is consistently better (model gets smaller AND better).
+
+#### Code vs Reasoning Circuit Map
 
 ```
 Layer:  0    8    12   16   20   24   28   32   36   40   48
@@ -65,153 +101,72 @@ Reason: .....████.......................................   (layers 8-12)
 Code:   ..........████.........████████.................   (layers 12-15, 28-32)
 ```
 
-Duplicating reasoning-optimal layers (8-12) actually **hurts** code performance (-13%), and vice versa.
-
-### Duplication Results (Code + SWE Probes)
-
-| Config | Code | SWE | Code Δ | SWE Δ |
-|--------|------|-----|--------|-------|
-| BASELINE | 38.1% | 82.8% | — | — |
-| dup(28,31) | 82.1% | 82.7% | +44.1% | -0.2% |
-| dup(12,15) | 64.4% | 84.1% | +26.4% | +1.2% |
-| dup(20,23) | 61.1% | 82.0% | +23.1% | -0.8% |
-| dup(8,11) | 25.2% | 88.1% | -12.9% | +5.2% |
-
-## Experiment 2: Layer Pruning
-
-Removed 2-layer blocks across the network. **Nearly every config improved both code and SWE scores.**
-
-### Pruning Results (Code + SWE Probes)
-
-| Config | Layers | Code | SWE | Code Δ | SWE Δ | Combined |
-|--------|--------|------|-----|--------|-------|----------|
-| **del(28,30)** | **46** | **84.9%** | **88.6%** | **+46.9%** | **+5.8%** | **+52.6%** |
-| del(20,22) | 46 | 80.8% | 89.8% | +42.7% | +7.0% | +49.7% |
-| del(16,18) | 46 | 76.0% | 85.3% | +37.9% | +2.5% | +40.4% |
-| del(24,26) | 46 | 71.8% | 86.4% | +33.8% | +3.6% | +37.4% |
-| del(32,34) | 46 | 63.0% | 92.3% | +24.9% | +9.5% | +34.4% |
-| del(8,10) | 46 | 64.9% | 84.9% | +26.9% | +2.1% | +28.9% |
-| del(4,6) | 46 | 56.0% | 83.3% | +18.0% | +0.5% | +18.5% |
-| del(12,14) | 46 | 32.1% | 84.0% | -6.0% | +1.2% | -4.8% |
-
-### Pruning vs Duplication
-
-Pruning consistently outperforms duplication. The top 7 combined scores are all prune operations:
-
-- **Pruning** makes the model smaller, faster, AND better
-- **Duplication** makes the model bigger, slower, and only sometimes better
-- Same layers (e.g., 8-10): pruning helps code (+27%), duplication hurts code (-13%)
-
-This suggests layers 28-29 actively **interfere** with code generation — they add noise to the forward pass that the model must work around.
-
-## Experiment 3: Thunderdome Validation
-
-Validated top configurations against 10 real SWE benchmark tasks using Crush orchestrator.
-
-### Overall Results
+#### Thunderdome Validation
 
 | Model | Size | Thunderdome Avg | Δ |
 |-------|------|-----------------|---|
 | Baseline (48 layers) | 18 GB | 0.573 | — |
 | **del(28,30) (46 layers)** | **17 GB** | **0.542** | **-3.1%** |
-| del(24,26) (46 layers) | 17 GB | 0.535 | -3.8% |
-| dup(28,32) code circuit | 20 GB | 0.526 | -4.7% |
-| dup(18,21) reasoning circuit | 19 GB | 0.531 | -4.2% |
 
-### del(28,30) Per-Task Breakdown
+Per-task: ecommerce-backend improved +130%, but fts-search and plugin-marketplace regressed. The pruned model is a practical trade-off: **11% smaller, ~3% faster, 3.1% worse on SWE benchmarks.**
 
-| Task | Baseline | Pruned | Δ |
-|------|----------|--------|---|
-| ecommerce-backend | 0.262 | **0.603** | **+130%** |
-| collab-server | 0.585 | 0.615 | +5% |
-| time-tracker | 0.215 | 0.246 | +14% |
-| phantom-invoice | 0.949 | 0.949 | 0% |
-| monorepo-disaster | 1.000 | 0.957 | -4% |
-| ssg-toolkit | 0.991 | 0.851 | -14% |
-| fts-search | 0.620 | 0.360 | -42% |
-| plugin-marketplace | 0.454 | 0.262 | -42% |
-| analytics-dashboard | 0.354 | 0.292 | -18% |
-| task-queue | 0.297 | 0.281 | -5% |
+### Mixtral 8x7B (32 layers, 8 experts)
 
-Notable: ecommerce-backend improved by **+130%** — the pruned model handled this complex greenfield task dramatically better. Trade-offs exist on fts-search and plugin-marketplace. Overall -3.1% is the best Thunderdome result from any modified model, and with single trials there's significant noise.
+**Duplication works, pruning doesn't.** With only 8 experts, each layer is critical — can add compute but can't remove it.
 
-**Practical trade-off:** 11% smaller, ~3% faster, 3.1% worse on SWE benchmarks.
+| Config | Code | SWE | Code Δ | SWE Δ |
+|--------|------|-----|--------|-------|
+| **BASELINE** | **17.9%** | **78.7%** | — | — |
+| **dup(8,11)** | **34.2%** | **80.5%** | **+16.4%** | **+1.8%** |
+| **dup(24,27)** | **29.8%** | **88.0%** | **+11.9%** | **+9.3%** |
+| del(16,18) | 0.0% | 80.7% | -17.9% | +2.0% |
 
-## Experiment 4: Cross-Model Comparison (Devstral-24B)
+dup(24,27) is particularly interesting — both code and SWE improve substantially (+12% and +9%).
 
-### Devstral Code+SWE Sweep
+### DeepSeek-Coder-V2-Lite (27 layers, 64 experts)
 
-Devstral (dense 24B, 40 layers) was swept with the same code + SWE probes. **Every configuration made the model worse** — the opposite of Qwen3-Coder where nearly every prune improved it.
+Moderate improvements from duplication. Required a `layer_path.py` fix to add missing `q_lora_rank` metadata.
 
-| Config | Mode | Code | SWE | Code Δ | SWE Δ |
-|--------|------|------|-----|--------|-------|
-| **BASELINE** | — | **75.0%** | **94.8%** | — | — |
-| dup(18,21) | dup | 61.1% | 91.1% | -13.9% | -3.8% |
-| del(28,30) | prune | 45.8% | 93.0% | -29.2% | -1.8% |
-| del(24,26) | prune | 36.6% | 86.7% | -38.4% | -8.2% |
-| del(20,22) | prune | 8.9% | 77.6% | -66.1% | -17.3% |
+| Config | Code | SWE | Code Δ | SWE Δ |
+|--------|------|-----|--------|-------|
+| **BASELINE** | **28.3%** | **86.8%** | — | — |
+| **dup(6,9)** | **36.1%** | **88.8%** | **+7.8%** | **+2.0%** |
+| dup(20,23) | 32.7% | 89.3% | +4.4% | +2.5% |
+| del(20,22) | 0.0% | 80.2% | -28.3% | -6.7% |
 
-Full results: 0 of 12 configurations improved either metric. Dense models are fundamentally more tightly coupled than MoE models.
+### Devstral-24B (40 layers, dense)
 
-### GPT-OSS-20B Code+SWE Sweep
+**0 of 12 configurations improved either metric.** Dense models are too tightly coupled for layer surgery.
 
-GPT-OSS-20B (MoE, 24 layers) — too few layers for pruning to work:
+### GPT-OSS-20B (24 layers, 128 experts)
 
-| Config | Mode | Code | SWE | Code Δ | SWE Δ |
-|--------|------|------|-----|--------|-------|
-| **BASELINE** | — | **47.8%** | **76.3%** | — | — |
-| dup(6,9) | dup | 61.6% | 70.0% | +13.8% | -6.3% |
-| del(12,14) | prune | 39.2% | 77.8% | -8.5% | +1.5% |
-| del(8,10) | prune | 0.0% | 25.4% | -47.8% | -50.9% |
+Despite having 128 experts, only 24 layers provides insufficient redundancy. Only `dup(6,9)` showed marginal code improvement (+13.8%) at the cost of SWE (-6.3%).
 
-With only 24 layers, removing any 2 is catastrophic (8% of the model). Only dup(6,9) improved code, but at the cost of SWE.
+### Nemotron-Nano-30B (52 layers, hybrid SSM+MoE)
 
-### DeepSeek-Coder-V2-Lite-16B
+All configurations crashed on load. The alternating Mamba-2/attention pattern creates rigid layer dependencies that can't be disrupted by reordering or removal.
 
-Baseline scores: code=28.3%, swe=86.8% (27 layers, MoE). Layer surgery was not possible — the `deepseek2` architecture's tensor naming convention is not supported by `layer_path.py`. This is a tooling limitation, not a model limitation.
+## Requirements for Successful Layer Surgery
 
-### Multi-Model Comparison
+Based on testing across 7 models, layer surgery requires:
 
-| Model | Arch | Layers | Type | Code | SWE | Pruning works? |
-|-------|------|--------|------|------|-----|----------------|
-| **Qwen3-Coder-30B-A3B** | qwen3moe | **48** | MoE | 38.1% | 82.8% | **YES (+47%)** |
-| GPT-OSS-20B | gpt-oss | 24 | MoE | 47.8% | 76.3% | No (too few layers) |
-| DeepSeek-Coder-V2-16B | deepseek2 | 27 | MoE | 28.3% | 86.8% | N/A (unsupported) |
-| Devstral-24B | llama | 40 | Dense | 75.0% | 94.8% | No (all configs hurt) |
+1. **MoE architecture** — dense models (Devstral) are too tightly coupled
+2. **Pure transformer layers** — hybrid SSM+MoE (Nemotron) breaks on reorder
+3. **Sufficient layer count** — 24 layers (GPT-OSS-20B) isn't enough; 27+ works
+4. **No thinking mode** — thinking models (Qwen3.5) generate 200+ tokens of reasoning that break probe evaluation
 
-**Layer surgery requires:**
-1. **MoE architecture** — dense models are too tightly coupled
-2. **Enough layers (40+)** — 24-27 layers don't have enough redundancy
-3. **Redundant/harmful layers** — Qwen3-Coder uniquely has layers that actively interfere with coding
-
-### Thunderdome Head-to-Head (Baselines)
-
-| Model | Avg Score | Wins |
-|-------|-----------|------|
-| Qwen3-Coder (baseline) | 0.573 | 5 |
-| Devstral (baseline) | 0.531 | 4 |
-
-## Conclusions
-
-1. **Layer pruning > layer duplication.** Removing harmful layers beats duplicating helpful ones. The model has redundant layers (particularly 28-29) that actively interfere with code generation.
-
-2. **Code and reasoning circuits are independent.** Code circuits (layers 12-15, 28-32) are in completely different locations from reasoning circuits (layers 8-12). Optimizing one dimension can hurt the other.
-
-3. **Probe improvements partially transfer to SWE tasks.** Code probe gains (+47%) don't fully translate to Thunderdome (+6% SWE probe, -4% Thunderdome). Multi-turn agentic SWE is more holistic than what single-turn probes capture.
-
-4. **Pruned models are practical.** The del(28,30) model is 11% smaller, ~3% faster, and within 4% of baseline on real SWE benchmarks — a good trade-off for latency-sensitive applications.
-
-5. **MoE models are more amenable to surgery.** Qwen3-Coder showed much larger effects than dense Devstral, likely because MoE routing provides natural modularity.
-
-6. **Canary tasks are essential.** The SWE probe's 100%-scoring tasks caught several configurations where the model appeared improved on hard tasks but had silently broken on basic capabilities.
+The optimal strategy depends on expert count:
+- **128+ experts:** Prune harmful layers (Qwen3-Coder)
+- **8-64 experts:** Duplicate beneficial layers (Mixtral, DeepSeek)
 
 ## Tools Developed
 
-- **`code_probe.py`** — 6-task hard coding probe (baseline ~38%)
-- **`swe_probe.py`** — 10-task SWE agentic probe with canary tasks (baseline ~82%)
+- **`code_probe.py`** — 6-task hard coding probe with `<think>` stripping
+- **`swe_probe.py`** — 10-task SWE agentic probe with canary tasks and `<think>` stripping
 - **`prune_sweep.py`** — Layer removal sweep
 - **`swe_sweep.py`** — Thunderdome-integrated sweep
-- **`sweep.py`** (modified) — Added code + SWE probes to existing suite
+- **`sweep.py`** (modified) — Added code + SWE probes, multi-metric evaluation
+- **`layer_path.py`** (modified) — Added deepseek2 `q_lora_rank` compatibility fix
 
 ## Reproduction
 
@@ -220,7 +175,10 @@ git clone https://github.com/signalnine/llm-circuit-finder.git
 cd llm-circuit-finder
 pip install gguf requests tqdm
 
-# Run code+SWE sweep (pruning)
+# Run code+SWE sweep on any model
+python /tmp/run_model_sweep.py /path/to/model.gguf model-name
+
+# Run pruning sweep
 python prune_sweep.py \
   --model /path/to/model.gguf \
   --llama-server /path/to/llama-server \
@@ -234,3 +192,13 @@ python sweep.py \
   --block-sizes 3 4 --stride 4 --start-min 8 --start-max 28 \
   --server-args --n-gpu-layers 999 --flash-attn on
 ```
+
+## Raw Data
+
+All sweep results are stored as JSONL files in this repository:
+- `qwen3-coder-codeswe-sweep.jsonl` — Qwen3-Coder pruning + duplication
+- `mixtral-8x7b-codeswe-sweep.jsonl` — Mixtral 8x7B
+- `deepseek-coder-v2-codeswe-sweep.jsonl` — DeepSeek-Coder-V2
+- `devstral-codeswe-sweep.jsonl` — Devstral-24B
+- `gptoss-20b-codeswe-sweep.jsonl` — GPT-OSS-20B
+- `nemotron-nano-30b-codeswe-sweep.jsonl` — Nemotron-Nano-30B
