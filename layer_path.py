@@ -140,6 +140,14 @@ def build_gguf_from_path(input_path: str, output_path: str,
             if val is not None:
                 writer.add_key_value(field.name, val, val_type, sub_type=sub_type)
 
+    # Add missing keys that some architectures require but older GGUFs lack
+    q_lora_key = f'{arch}.attention.q_lora_rank'
+    if q_lora_key not in {f.name for f in reader.fields.values()}:
+        if arch in ('deepseek2',):
+            writer.add_key_value(q_lora_key, 0, GGUFValueType.UINT32)
+            if verbose:
+                print(f"  Added missing key: {q_lora_key} = 0")
+
     # Organize tensors by layer
     non_block_tensors = []
     block_tensors = {}
