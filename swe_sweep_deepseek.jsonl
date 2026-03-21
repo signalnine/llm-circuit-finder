@@ -1,0 +1,2 @@
+{"is_baseline": true, "task_scores": {"bench-fts-search": 0.6, "bench-phantom-invoice": 0.7951219512195121, "bench-time-tracker": 0.19999999999999996}, "avg_score": 0.5317073170731706, "timestamp": "2026-03-20T19:10:45"}
+{"is_baseline": false, "mode": "dup", "start": 6, "end": 9, "label": "dup(6,9)", "task_scores": {"bench-fts-search": 0.6, "bench-phantom-invoice": 0.7951219512195121, "bench-time-tracker": 0.19999999999999996}, "avg_score": 0.5317073170731706, "timestamp": "2026-03-20T19:12:52"}
