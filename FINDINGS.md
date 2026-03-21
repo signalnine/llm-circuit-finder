@@ -171,19 +171,22 @@ All configurations crashed on load. The alternating Mamba-2/attention pattern cr
 
 ## Thunderdome Validation Summary
 
-Results vary by model and surgery strategy:
+**Probe improvements do not reliably transfer to end-to-end SWE benchmarks.**
 
-| Model | Config | Probe Code Δ | Probe SWE Δ | Thunderdome Δ |
-|-------|--------|-------------|-------------|---------------|
-| Qwen3-Coder | del(28,30) | +46.9% | +5.8% | -3.1% |
-| Qwen3-Coder | del(24,26) | +33.8% | +3.6% | -5.1% |
-| **Mixtral 8x7B** | **dup(8,11)** | **+16.4%** | **+1.8%** | **+5.8%** |
-| **Mixtral 8x7B** | **dup(24,27)** | **+11.9%** | **+9.3%** | **+5.8%** |
-| DeepSeek-Coder-V2 | dup(6,9) | +7.8% | +2.0% | 0.0% |
+| Model | Config | Probe Code Δ | Probe SWE Δ | Thunderdome Δ | Tasks |
+|-------|--------|-------------|-------------|---------------|-------|
+| Qwen3-Coder | del(28,30) | +46.9% | +5.8% | **-3.1%** | 10 |
+| Qwen3-Coder | del(24,26) | +33.8% | +3.6% | -5.1% | 3 |
+| Mixtral 8x7B | dup(24,27) | +11.9% | +9.3% | +0.9% | 8 |
+| DeepSeek-Coder-V2 | dup(6,9) | +7.8% | +2.0% | 0.0% | 3 |
 
-**Key finding:** Mixtral is the only model where probe improvements transferred to real SWE benchmarks. The difference may be that duplication on low-expert models (8 experts) reinforces computation without disrupting information flow, while pruning high-expert models (128 experts) removes layers the model has learned to route through.
+Across all models and strategies, surgically modified models score within ~5% of baseline on real SWE benchmarks. The consistent pattern:
 
-Qwen3-Coder pruning removes redundant layers but the model's routing has adapted to their presence — removing them degrades multi-turn SWE despite improving single-turn probes. Mixtral duplication adds extra processing that helps across the board.
+- **Pruning (high-expert MoE):** Dramatic probe improvements (+47% code) but Thunderdome degradation (-3 to -5%). The model's routing has adapted to all layers being present — removing them disrupts multi-turn reasoning.
+- **Duplication (low-expert MoE):** Moderate probe improvements (+8-16% code) and roughly neutral Thunderdome performance (±1%). Adding layers reinforces computation without breaking routing.
+- **Neither strategy reliably improves real SWE performance.** Single-turn probes measure algorithmic problem-solving, while Thunderdome measures multi-turn agentic capability — a fundamentally different skill.
+
+**Practical value:** Pruning high-expert MoE models (Qwen3-Coder del(28,30)) produces models that are 11% smaller and ~3% faster, at the cost of ~3% SWE degradation — a worthwhile trade-off for latency-sensitive deployments.
 
 ## Requirements for Successful Layer Surgery
 
