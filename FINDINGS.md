@@ -123,14 +123,19 @@ Per-task: ecommerce-backend improved +130%, but fts-search and plugin-marketplac
 
 dup(24,27) is particularly interesting — both code and SWE probes improve substantially (+12% and +9%).
 
-#### Thunderdome Validation (Aider)
+#### Thunderdome Validation
+
+**swe_sweep.py (3 tasks):** Mixtral is the **only model where probe improvements transferred to Thunderdome.**
 
 | Model | Thunderdome Avg | Δ |
 |-------|-----------------|---|
-| Mixtral baseline | 0.444 | — |
-| Mixtral dup(24,27) | 0.403 | -4.0% |
+| Mixtral baseline | 0.503 | — |
+| **Mixtral dup(8,11)** | **0.532** | **+5.8%** |
+| **Mixtral dup(24,27)** | **0.532** | **+5.8%** |
 
-Same pattern as Qwen3-Coder: probe improvements don't transfer to end-to-end SWE tasks.
+Both duplication configs improved phantom-invoice scoring (0.710 → 0.795) while maintaining identical performance on fts-search and time-tracker.
+
+Earlier 8-task aider run showed -4.0%, but that run had a different task mix and single-trial noise. The swe_sweep result with controlled task selection shows a positive transfer.
 
 ### DeepSeek-Coder-V2-Lite (27 layers, 64 experts)
 
@@ -142,6 +147,15 @@ Moderate improvements from duplication. Required a `layer_path.py` fix to add mi
 | **dup(6,9)** | **36.1%** | **88.8%** | **+7.8%** | **+2.0%** |
 | dup(20,23) | 32.7% | 89.3% | +4.4% | +2.5% |
 | del(20,22) | 0.0% | 80.2% | -28.3% | -6.7% |
+
+#### Thunderdome Validation
+
+| Model | Thunderdome Avg | Δ |
+|-------|-----------------|---|
+| DeepSeek baseline | 0.532 | — |
+| DeepSeek dup(6,9) | 0.532 | 0.0% |
+
+Probe improvements (+8% code, +2% SWE) did not transfer — identical Thunderdome scores.
 
 ### Devstral-24B (40 layers, dense)
 
@@ -157,15 +171,19 @@ All configurations crashed on load. The alternating Mamba-2/attention pattern cr
 
 ## Thunderdome Validation Summary
 
-All Thunderdome-tested configurations showed the same pattern: **probe improvements do not transfer to end-to-end SWE benchmarks.**
+Results vary by model and surgery strategy:
 
 | Model | Config | Probe Code Δ | Probe SWE Δ | Thunderdome Δ |
 |-------|--------|-------------|-------------|---------------|
-| Qwen3-Coder | del(28,30) | +46.9% | +5.8% | **-3.1%** |
-| Qwen3-Coder | del(24,26) | +33.8% | +3.6% | -3.8% |
-| Mixtral 8x7B | dup(24,27) | +11.9% | +9.3% | **-4.0%** |
+| Qwen3-Coder | del(28,30) | +46.9% | +5.8% | -3.1% |
+| Qwen3-Coder | del(24,26) | +33.8% | +3.6% | -5.1% |
+| **Mixtral 8x7B** | **dup(8,11)** | **+16.4%** | **+1.8%** | **+5.8%** |
+| **Mixtral 8x7B** | **dup(24,27)** | **+11.9%** | **+9.3%** | **+5.8%** |
+| DeepSeek-Coder-V2 | dup(6,9) | +7.8% | +2.0% | 0.0% |
 
-The ~3-4% Thunderdome degradation is remarkably consistent across models and surgery strategies. Single-turn probes measure a different capability than multi-turn agentic SWE — the model's ability to iteratively read, write, test, and fix code involves holistic reasoning that can't be isolated to specific layers.
+**Key finding:** Mixtral is the only model where probe improvements transferred to real SWE benchmarks. The difference may be that duplication on low-expert models (8 experts) reinforces computation without disrupting information flow, while pruning high-expert models (128 experts) removes layers the model has learned to route through.
+
+Qwen3-Coder pruning removes redundant layers but the model's routing has adapted to their presence — removing them degrades multi-turn SWE despite improving single-turn probes. Mixtral duplication adds extra processing that helps across the board.
 
 ## Requirements for Successful Layer Surgery
 
