@@ -201,7 +201,32 @@ The optimal strategy depends on expert count:
 - **128+ experts:** Prune harmful layers (Qwen3-Coder: +47% code, model gets smaller)
 - **8-64 experts:** Duplicate beneficial layers (Mixtral: +16%, DeepSeek: +8%, model gets larger)
 
-**Practical takeaway:** Pruning high-expert MoE models is the most valuable application — models get simultaneously smaller, faster, and better on algorithmic probes, at the cost of ~3% on real SWE benchmarks. For latency-sensitive or resource-constrained deployments, this is a worthwhile trade-off.
+**Practical takeaway:** Pruning high-expert MoE models is the most valuable application — models get simultaneously smaller, faster, and better on algorithmic probes, at the cost of ~3-5% on real SWE benchmarks.
+
+## Experiment: Pruning vs Lower Quantization for Size Reduction
+
+To determine whether layer pruning is a better size-reduction strategy than simply using a smaller quantization, we compared two sub-16GB variants of Qwen3-Coder-30B-A3B:
+
+| Variant | Layers | Quant | Size | Thunderdome Avg | Δ vs Baseline |
+|---------|--------|-------|------|-----------------|---------------|
+| **Baseline** | 48 | Q4_K_M | 18.6 GB | **0.533** | — |
+| Pruned (del 6 layers) | 42 | Q4_K_S | 15.4 GB | 0.499 | **-3.5%** |
+| **Lower quant** | **48** | **Q3_K_M** | **14.7 GB** | **0.523** | **-1.1%** |
+
+**Lower quantization wins.** Q3_K_M (14.7 GB) preserves quality better (-1.1%) than pruning to Q4_K_S (15.4 GB, -3.5%), while being even smaller. Quantization distributes the quality loss evenly across all layers, while pruning removes entire processing steps that some tasks depend on (plugin-marketplace dropped from 0.477 to 0.215 with pruning but only to 0.468 with Q3_K_M).
+
+### Per-Task Breakdown
+
+| Task | Baseline | Pruned (15.4 GB) | Q3_K_M (14.7 GB) | Better small model |
+|------|----------|------------------|-------------------|-------------------|
+| fts-search | 0.612 | **0.660** | 0.620 | Pruned |
+| phantom-invoice | 0.907 | 0.949 | 0.949 | Tied |
+| plugin-marketplace | 0.477 | 0.215 | **0.468** | Q3_K_M |
+| task-queue | 0.301 | 0.292 | **0.300** | Q3_K_M |
+| time-tracker | 0.318 | **0.292** | 0.215 | Pruned |
+| collab-server | 0.585 | 0.585 | 0.585 | Tied |
+
+**Conclusion:** For fitting a model into a smaller VRAM budget, standard quantization (Q3_K_M) is preferable to layer pruning. Pruning is better understood as a tool for improving specific probe metrics, not for general-purpose size reduction.
 
 ## Tools Developed
 
