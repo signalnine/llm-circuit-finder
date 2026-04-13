@@ -169,6 +169,60 @@ Despite having 128 experts, only 24 layers provides insufficient redundancy. Onl
 
 All configurations crashed on load. The alternating Mamba-2/attention pattern creates rigid layer dependencies that can't be disrupted by reordering or removal.
 
+### Qwen3.5-35B-A3B (40 layers, hybrid attention interval=4)
+
+**Baseline is broken in llama.cpp** — the unmodified model scored 0% on math, EQ, reasoning, code, and general probes (only 10% on SWE). This confirms the upstream author's observation: Qwen3.5's hybrid attention pattern (a full-attention layer every 4 steps) is not correctly routed by llama.cpp out of the box.
+
+Layer-swap surgery recovered real capability. Using `--mode replace-same` (replaces a layer with the next non-attention layer, preserving the hybrid stride), 32 single-layer swap configs were evaluated across layers 4-35:
+
+| Config | Code | SWE | Reasoning | General |
+|--------|------|-----|-----------|---------|
+| replace-same(14,16) | **20.63%** | 0% | 5.88% | 0% |
+| replace-same(28,29) | 16.67% | 10% | 0% | 0% |
+| replace-same( 8, 9) | 14.44% | 10% | 0% | 7.14% |
+| replace-same(24,25) | 14.44% | **45%** | 0% | 0.71% |
+| replace-same(18,20) | 0% | **48.33%** | 0% | 0% |
+| replace-same(17,18) | 0% | 30% | 0% | 7.14% |
+| replace-same(32,33) | 9.52% | 28.33% | 5.88% | 0% |
+| replace-same(21,22) | 0% | 10% | **11.76%** | 0% |
+| replace-same(22,24) | 0% | 0% | 0% | **13.74%** |
+| baseline | 0% | 10% | 0% | 7.14% |
+
+**Task-specific circuits are clearly separable:**
+- Code: layers 14-16 (+20.63pp)
+- SWE: layers 18-20 (+38.33pp) and 24-25 (+35pp)
+- Reasoning: layers 21-22 (+11.76pp)
+- General knowledge: layers 22-24 (+6.6pp)
+
+Math and EQ remained at 0% across all configs, suggesting either that those capabilities require a multi-layer intervention or that llama.cpp's hybrid routing damages them beyond recovery from single-layer swaps.
+
+These results validate two claims from Alain Reyes (original RYS author):
+1. Qwen3.5 requires preservation of the 4-layer attention stride; `replace-next` (which ignores stride) caused server crashes on attention-layer positions, while `replace-same` (stride-aware) ran cleanly.
+2. Category-based probes via `--probe-dir` (`general_general.json`, `general_languages.json`) surface capability differences invisible to the math/EQ/reasoning probes alone.
+
+Raw data: `qwen35_replace_same.jsonl`.
+
+#### Circuit Composition
+
+Seven compositions of the hot circuits were tested by applying multiple layer swaps simultaneously (e.g., `layers[14]=16; layers[18]=20`):
+
+| Combo | Code | SWE | Reas | Gen |
+|-------|-----:|----:|-----:|----:|
+| (best solos) | 20.63% | 48.33% | 11.76% | 13.74% |
+| code(14,16)+swe(18,20) | 5.56% | 18.75% | 0% | 7.14% |
+| code(14,16)+swe(24,25) | 0% | 26.67% | 0% | 0% |
+| swe(18,20)+swe(24,25) | 11.11% | 26.67% | 0% | 0% |
+| code(14,16)+swe(18,20)+swe(24,25) | 5.56% | 30.00% | 0% | 7.14% |
+| **code(14,16)+reas(21,22)** | **22.86%** | 10.00% | 0% | 7.14% |
+| code(14,16)+gen(22,24) | 0% | 0% | 0% | 0% |
+| code(14,16)+swe(18,20)+reas(21,22) | 0% | 30.00% | 5.88% | 0% |
+
+**Circuits do not stack additively.** Every composition involving SWE(18,20) degraded it from 48% to 18-30%. Only code(14,16)+reas(21,22) showed mild synergy (code 20.63% → 22.86%). The code(14,16)+gen(22,24) pairing was catastrophically destructive, zeroing every metric.
+
+Interpretation: Qwen3.5's capability circuits overlap in layer space, and the interference pattern required to surface one capability is broken when multiple surgeries are applied at once. The practical implication is that **surgery must target a single capability at a time** — there is no "swiss-army" config that recovers all broken capabilities simultaneously.
+
+Raw data: `qwen35_combo.jsonl`.
+
 ## Thunderdome Validation Summary
 
 **Probe improvements do not reliably transfer to end-to-end SWE benchmarks.**

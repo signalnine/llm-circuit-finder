@@ -47,6 +47,23 @@ def get_field_value(reader, key):
     return field.contents()
 
 
+def get_model_info(input_path: str) -> dict:
+    """Read basic model metadata from a GGUF file.
+
+    Returns: {architecture, block_count, full_attention_interval (or None)}.
+    """
+    reader = GGUFReader(input_path, 'r')
+    arch = get_field_value(reader, gguf.Keys.General.ARCHITECTURE)
+    if arch is None:
+        raise ValueError(f"Could not read architecture from {input_path}")
+    block_count = get_field_value(reader, f'{arch}.block_count')
+    if block_count is None:
+        raise ValueError(f"Could not read block_count from {input_path}")
+    fai = get_field_value(reader, f'{arch}.full_attention_interval')
+    return {"architecture": arch, "block_count": block_count,
+            "full_attention_interval": fai}
+
+
 def parse_layer_path(path_str: str) -> list[int]:
     """
     Parse a layer path string into a list of layer indices.

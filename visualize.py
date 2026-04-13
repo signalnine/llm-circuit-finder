@@ -104,11 +104,140 @@ def print_bar_chart(baseline, results):
         print(f"{config:>12} {bar} {val:+.2f}")
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <results.jsonl>")
-        sys.exit(1)
+def print_heatmap(baseline, results):
+    """Print a multi-probe heatmap from circuit_map.py results.
 
-    baseline, results = load_results(sys.argv[1])
-    print_ranked(baseline, results)
-    print_bar_chart(baseline, results)
+    Shows which layer ranges affect which probe types, enabling
+    identification of task-specific circuits.
+    """
+    if not baseline or not results:
+        print("Need baseline and results for heatmap!")
+        return
+
+    probes = ["math_score", "reasoning_score", "code_score", "swe_score"]
+    probe_labels = {"math_score": "Math", "reasoning_score": "Reason",
+                    "code_score": "Code", "swe_score": "SWE"}
+
+    # Group by block_size for separate heatmaps
+    by_bs = {}
+    for r in results:
+        bs = r.get("block_size", r.get("end", 0) - r.get("start", 0))
+        if bs not in by_bs:
+            by_bs[bs] = []
+        by_bs[bs].append(r)
+
+    for bs in sorted(by_bs.keys()):
+        group = sorted(by_bs[bs], key=lambda x: x.get("start", 0))
+        mode = group[0].get("mode", "dup")
+        prefix = "del" if mode == "prune" else "dup"
+
+        print(f"\n{'=' * 80}")
+        print(f"  Block size {bs} ({prefix}) — delta vs baseline")
+        print(f"{'=' * 80}")
+
+        # Header
+        print(f"{'Layer':>12}", end="")
+        for p in probes:
+            print(f"  {probe_labels[p]:>8}", end="")
+        print(f"  {'Best':>8}")
+        print("-" * (12 + len(probes) * 10 + 10))
+
+        for r in group:
+            start = r.get("start", r.get("dup_start", "?"))
+            end = r.get("end", r.get("dup_end", "?"))
+            label = f"{prefix}({start},{end})"
+            print(f"{label:>12}", end="")
+
+            deltas = {}
+            best_probe = None
+            best_delta = -999
+
+            for p in probes:
+                val = r.get(p, 0)
+                base_val = baseline.get(p, 0)
+                delta = val - base_val
+                deltas[p] = delta
+
+                if delta > best_delta:
+                    best_delta = delta
+                    best_probe = p
+
+                # Color-code: positive = good, negative = bad
+                if p in ("math_score",):
+                    d_str = f"{delta:>+8.4f}"
+                else:
+                    d_str = f"{delta:>+8.2%}"
+                print(f"  {d_str}", end="")
+
+            print(f"  {probe_labels.get(best_probe, '?'):>8}")
+
+        print()
+
+    # ASCII circuit map (FINDINGS.md style)
+    print(f"\n{'=' * 80}")
+    print("  Circuit Map (layers where each probe improves by >2%)")
+    print(f"{'=' * 80}")
+
+    # Find the layer range across all results
+    all_starts = [r.get("start", r.get("dup_start", 0)) for r in results]
+    all_ends = [r.get("end", r.get("dup_end", 0)) for r in results]
+    if not all_starts:
+        return
+    min_layer = min(all_starts)
+    max_layer = max(all_ends)
+
+    # For block_size=1 results, build per-layer per-probe delta
+    bs1 = [r for r in results if r.get("block_size", 0) == 1]
+    if not bs1:
+        bs1 = by_bs.get(min(by_bs.keys()), [])
+
+    # Build layer -> probe delta map
+    layer_deltas = {}
+    for r in bs1:
+        start = r.get("start", r.get("dup_start", 0))
+        for p in probes:
+            delta = r.get(p, 0) - baseline.get(p, 0)
+            if start not in layer_deltas:
+                layer_deltas[start] = {}
+            layer_deltas[start][p] = delta
+
+    # Print scale
+    scale_parts = []
+    for i in range(min_layer, max_layer + 1, max(1, (max_layer - min_layer) // 10)):
+        scale_parts.append(f"{i:<4}")
+    print(f"{'Layer:':>10} {''.join(scale_parts)}")
+
+    # Print per-probe line
+    threshold = 0.02  # 2% improvement threshold
+    for p in probes:
+        label = probe_labels[p]
+        line = ""
+        for layer in range(min_layer, max_layer + 1):
+            delta = layer_deltas.get(layer, {}).get(p, 0)
+            if p == "math_score":
+                # Math uses absolute delta, threshold at 0.02
+                line += "#" if delta > 0.02 else ("!" if delta < -0.02 else ".")
+            else:
+                line += "#" if delta > threshold else ("!" if delta < -threshold else ".")
+        print(f"{label:>10} {line}")
+
+    print()
+    print("  # = improves >2%    . = neutral    ! = hurts >2%")
+
+
+if __name__ == "__main__":
+    import argparse as _argparse
+
+    parser = _argparse.ArgumentParser(description="Visualize sweep results")
+    parser.add_argument("results", help="Path to results JSONL file")
+    parser.add_argument("--heatmap", action="store_true",
+                        help="Show multi-probe heatmap (for circuit_map.py output)")
+    args = parser.parse_args()
+
+    baseline, results = load_results(args.results)
+
+    if args.heatmap:
+        print_heatmap(baseline, results)
+    else:
+        print_ranked(baseline, results)
+        print_bar_chart(baseline, results)

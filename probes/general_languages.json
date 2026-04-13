@@ -1,0 +1,46 @@
+{
+    "name": "languages",
+    "max_tokens": 48,
+    "questions": [
+        {
+            "prompt": "Quelle est la capitale de la France épelée à l'envers ? Répondez avec un seul mot en lettres latines, sans explication.",
+            "answer": "sirap"
+        },
+        {
+            "prompt": "¿Cuál es la capital de España deletreada al revés? Responde con una sola palabra en letras latinas, sin explicación.",
+            "answer": "dirdam"
+        },
+        {
+            "prompt": "Was ist die Hauptstadt Deutschlands rückwärts buchstabiert? Antworte mit einem einzigen Wort in lateinischen Buchstaben, ohne Erklärung.",
+            "answer": "nilreb"
+        },
+        {
+            "prompt": "Qual è la capitale dell'Italia scritta al contrario? Rispondi con una sola parola in lettere latine, senza spiegazioni.",
+            "answer": "amor"
+        },
+        {
+            "prompt": "Qual é a capital do Brasil soletrada ao contrário? Responda com uma única palavra em letras latinas, sem explicação.",
+            "answer": "ailisarb"
+        },
+        {
+            "prompt": "日本の首都をローマ字で逆に綴ると何ですか？ローマ字の一単語だけで答えてください。説明は不要です。",
+            "answer": "oykot"
+        },
+        {
+            "prompt": "중국의 수도를 로마자로 거꾸로 쓰면 무엇입니까? 로마자 한 단어로만 답하세요. 설명은 필요 없습니다.",
+            "answer": "gnijeb"
+        },
+        {
+            "prompt": "Какая столица России, написанная задом наперёд латинскими буквами? Ответьте одним словом латиницей, без объяснений.",
+            "answer": "wocsom"
+        },
+        {
+            "prompt": "Türkiye'nin başkentini latin harfleriyle tersten yazınız. Açıklama yapmadan sadece tek bir kelime yazınız.",
+            "answer": "arakna"
+        },
+        {
+            "prompt": "ما هي عاصمة مصر مكتوبة بالمقلوب بالحروف اللاتينية؟ أجب بكلمة واحدة فقط بالحروف اللاتينية، بدون شرح.",
+            "answer": "oriac"
+        }
+    ]
+}

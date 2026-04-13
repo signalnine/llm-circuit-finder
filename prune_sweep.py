@@ -11,27 +11,14 @@ Uses the same probe infrastructure as sweep.py.
 
 import argparse
 import json
-import os
-import signal
 import subprocess
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 
-import requests
-
-from gguf_surgery import BLK_PATTERN
-from math_probe import MATH_QUESTIONS, score_math_response
-from eq_probe import EQ_SCENARIOS, build_eq_prompt, parse_eq_response, score_eq_response
-from reasoning_probe import REASONING_QUESTIONS, score_reasoning_response
-from code_probe import CODE_TASKS, score_code_response
-
-# Import shared functions from sweep.py
-from sweep import (
-    wait_for_server, start_server, stop_server, dump_server_log,
-    query_model, run_math_probe, run_eq_probe, run_reasoning_probe,
-    run_code_probe, run_evaluation, DEFAULT_PORT, SERVER_STARTUP_TIMEOUT,
+from sweep_lib import (
+    DEFAULT_PORT, wait_for_server, start_server, stop_server,
+    dump_server_log, run_evaluation, load_jsonl, append_jsonl,
 )
 
 
@@ -135,20 +122,8 @@ def main():
     layer_path_script = str(Path(__file__).parent / "layer_path.py")
 
     results_path = Path(args.results)
-    results = []
-    baseline = None
-
-    # Load existing results if resuming
-    if results_path.exists():
-        with open(results_path) as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    entry = json.loads(line)
-                    if entry.get("is_baseline"):
-                        baseline = entry
-                    else:
-                        results.append(entry)
+    baseline, results = load_jsonl(str(results_path))
+    if results or baseline:
         print(f"Loaded {len(results)} existing results + baseline={baseline is not None}")
 
     # Get model layer count
@@ -189,8 +164,7 @@ def main():
                 "timestamp": datetime.now().isoformat(),
             }
 
-            with open(results_path, "a") as f:
-                f.write(json.dumps(baseline) + "\n")
+            append_jsonl(str(results_path), baseline)
 
             brs = baseline['reasoning_score']
             bcs = baseline.get('code_score', 0)
@@ -261,9 +235,7 @@ def main():
             }
 
             results.append(entry)
-
-            with open(results_path, "a") as f:
-                f.write(json.dumps(entry) + "\n")
+            append_jsonl(str(results_path), entry)
 
             print_results_table(results, baseline)
 
