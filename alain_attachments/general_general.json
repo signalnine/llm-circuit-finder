@@ -1,0 +1,22 @@
+{
+    "name": "general",
+    "max_tokens": 400,
+    "questions": [
+        {
+            "prompt": "list all the numbers between 0 and 9, example 0, 1,...",
+            "answer": "0, 1, 2, 3, 4, 5, 6, 7, 8, 9"
+        },
+        {
+            "prompt": "list all the letters in the english alphabet, like a, b, c,...",
+            "answer": "a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z"
+        },
+        {
+            "prompt": "sort this inventions from old to recent: telephone, computer, cellphone, smartphone, sock, example: cellphone, sock, ...",
+            "answer": "sock, telephone, computer, cellphone, smartphone"
+        },
+        {
+            "prompt": "sort the words: big, medium, tiny, small, huge in a increasing fashion, example: huge, tiny,medium, ...",
+            "answer": "tiny, small, medium, big, huge"
+        }
+    ]
+}

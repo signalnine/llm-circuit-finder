@@ -1,0 +1,1 @@
+{"is_baseline": true, "dup_start": -1, "dup_end": -1, "task_scores": {"bench-phantom-invoice": 0.7951219512195121, "bench-ecommerce-backend": 0.5749287749287749, "bench-analytics-dashboard": 0.6307692307692307, "bench-collab-server": 0.5846153846153846, "bench-plugin-marketplace": 0.42637362637362636}, "avg_score": 0.6023617935813058, "timestamp": "2026-03-18T22:23:41"}

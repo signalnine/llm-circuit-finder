@@ -1,0 +1,3 @@
+{"is_baseline": true, "task_scores": {"bench-phantom-invoice": 0.948780487804878, "bench-time-tracker": 0.2769230769230769}, "avg_score": 0.6128517823639774, "timestamp": "2026-03-20T12:57:59"}
+{"is_baseline": false, "mode": "prune", "start": 20, "end": 22, "label": "del(20,22)", "task_scores": {"bench-phantom-invoice": 0.846341463414634}, "avg_score": 0.846341463414634, "timestamp": "2026-03-20T13:13:59"}
+{"is_baseline": false, "mode": "prune", "start": 28, "end": 30, "label": "del(28,30)", "task_scores": {"bench-phantom-invoice": 0.7951219512195121}, "avg_score": 0.7951219512195121, "timestamp": "2026-03-20T13:29:55"}
