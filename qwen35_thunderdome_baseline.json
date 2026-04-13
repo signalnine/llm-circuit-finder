@@ -1,0 +1,14 @@
+{
+  "orchestrator": "crush-qwen35-baseline",
+  "scores": {
+    "bench-phantom-invoice": 0.98,
+    "bench-ecommerce-backend": 0.88,
+    "bench-analytics-dashboard": 0.25,
+    "bench-collab-server": 0.29,
+    "bench-plugin-marketplace": 0.84,
+    "bench-time-tracker": 0.74,
+    "bench-task-queue": 0.3,
+    "bench-financial-ledger": 1.0
+  },
+  "avg": 0.66
+}

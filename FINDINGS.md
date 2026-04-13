@@ -223,6 +223,31 @@ Interpretation: Qwen3.5's capability circuits overlap in layer space, and the in
 
 Raw data: `qwen35_combo.jsonl`.
 
+#### Thunderdome Validation (8 tasks, Crush orchestrator)
+
+The best single-swap circuit `replace-same(24,25)` (probe winner: code +14.4pp, SWE +45pp) was benchmarked against the unmodified baseline across 8 Thunderdome tasks via the Crush orchestrator on llama-server.
+
+| Task | Baseline | Circuit(24,25) | Δ |
+|------|---------:|--------:|----:|
+| phantom-invoice | 0.98 | 0.98 | 0.00 |
+| ecommerce-backend | 0.88 | 0.26 | **-0.62** |
+| analytics-dashboard | 0.25 | 0.63 | +0.38 |
+| collab-server | 0.29 | 0.46 | +0.17 |
+| plugin-marketplace | 0.84 | 0.29 | **-0.55** |
+| time-tracker | 0.74 | 0.32 | **-0.42** |
+| task-queue | 0.30 | 0.26 | -0.04 |
+| financial-ledger | 1.00 | 1.00 | 0.00 |
+| **Average** | **0.660** | **0.525** | **-0.135** |
+
+**The circuit lost -13.5pp on Thunderdome despite winning +45pp on the SWE probe.** Two revelations:
+
+1. **The unmodified Qwen3.5-35B is not actually broken in agentic contexts.** The probe baseline of 0% on math/eq/reasoning/code was misleading — those probes used short `max_tokens` budgets that were entirely consumed by the model's `<think>` reasoning phase, leaving no tokens for the final answer. With Crush's generous per-turn token budget and `--reasoning-format none`, the baseline scored 66% across 8 tasks — competitive with the best layer-surgeried Mixtral configs (51.9% dup811).
+2. **Circuit surgery that improves single-turn probes actively damages multi-turn agentic capability.** This replicates the pattern already documented for Qwen3-Coder, DeepSeek-Coder-V2, and Devstral in this repository: probe improvements do not transfer to Thunderdome. The gains on (24,25) came from the surgery compensating for how the probe measures output — not from genuine capability improvement.
+
+The upshot: **probe scores are a poor proxy for real SWE capability.** For Qwen3.5 in particular, the unmodified model is already production-ready under Crush once `--reasoning-format none` is set and context is ≥32k. Layer surgery provides no value on this architecture for agentic work, and in several tasks is actively harmful.
+
+Raw data: `qwen35_thunderdome_baseline.json`, `qwen35_thunderdome_circuit.json`.
+
 ## Thunderdome Validation Summary
 
 **Probe improvements do not reliably transfer to end-to-end SWE benchmarks.**
